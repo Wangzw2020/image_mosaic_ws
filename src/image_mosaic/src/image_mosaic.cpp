@@ -25,7 +25,7 @@ private:
 	int frame_rate_;
 	bool is_show_result_;
 	std::vector<bool> image_ok_;
-	bool image_all_ok_ = true;
+	bool image_all_ok_;
 	ros::Subscriber sub_image1_, sub_image2_, sub_image3_, sub_image4_;
 	ros::Timer timer_;
 	
@@ -90,7 +90,7 @@ bool ImageMosaic::init()
 
 void ImageMosaic::loadimage1(const sensor_msgs::ImageConstPtr& msg)
 {
-	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[0] = cv;
@@ -99,7 +99,7 @@ void ImageMosaic::loadimage1(const sensor_msgs::ImageConstPtr& msg)
 
 void ImageMosaic::loadimage2(const sensor_msgs::ImageConstPtr& msg)
 {
-	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[1] = cv;
@@ -108,7 +108,7 @@ void ImageMosaic::loadimage2(const sensor_msgs::ImageConstPtr& msg)
 
 void ImageMosaic::loadimage3(const sensor_msgs::ImageConstPtr& msg)
 {
-	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[2] = cv;
@@ -117,7 +117,7 @@ void ImageMosaic::loadimage3(const sensor_msgs::ImageConstPtr& msg)
 
 void ImageMosaic::loadimage4(const sensor_msgs::ImageConstPtr& msg)
 {
-	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[3] = cv;
@@ -127,7 +127,7 @@ void ImageMosaic::loadimage4(const sensor_msgs::ImageConstPtr& msg)
 void ImageMosaic::mosaicpub(const ros::TimerEvent&)
 {
 	int width = 0;
-	
+	image_all_ok_ = true;
 	ROS_INFO("[%s]: image mosaic!",_NODE_NAME_);
 	for (int i=0; i<image_id_.size(); ++i)
 		if (image_ok_[i] == false)
@@ -151,7 +151,7 @@ void ImageMosaic::mosaicpub(const ros::TimerEvent&)
 	}
 	else
 	{
-		ROS_INFO("[%s]: Some image load failed!",_NODE_NAME_);
+		ROS_ERROR("[%s]: Some image load failed!",_NODE_NAME_);
 	}
 }
 
