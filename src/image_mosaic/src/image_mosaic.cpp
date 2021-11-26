@@ -141,8 +141,9 @@ void ImageMosaic::mosaicpub(const ros::TimerEvent&)
 		int height = cv_ptr_[0]->image.rows;
 		cv::Mat mosaic_image(height, width, CV_8UC3);
 		mosaic_image.setTo(0);
-		cv_ptr_[0]->image.copyTo(mosaic_image(Rect(0, 0, img_width, height)));
-		cv_ptr_[1]->image.copyTo(mosaic_image(Rect(img_width, 0, img_width, height)));
+		
+		for (int i=0; i<image_id_.size(); ++i)
+			cv_ptr_[i]->image.copyTo(mosaic_image(Rect(i * img_width, 0, img_width, height)));
 		sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", mosaic_image).toImageMsg();
 		imageMsg->header.frame_id = std::string("mosaic image");
 		imageMsg->header.stamp = ros::Time::now();
