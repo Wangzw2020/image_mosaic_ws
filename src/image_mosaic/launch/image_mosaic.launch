@@ -7,7 +7,7 @@
 		<param name ="image_topic" value="/image_rect"/>
 		<param name ="frame_rate" value="30"/>
 		<param name="is_show_result" value="$(arg show_result)"/>
-		<rosparam param="image_id" > [1, 2] </rosparam>
+		<rosparam param="image_id" > [1, 2, 3, 4] </rosparam>
 		
 	</node>
 

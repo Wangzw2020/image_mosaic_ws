@@ -24,8 +24,8 @@ private:
 	std::vector<int> imageResolution_;
 	int frame_rate_;
 	bool is_show_result_;
-	bool image1_ = false;
-	bool image2_ = false;
+	std::vector<bool> image_ok_;
+	bool image_all_ok_ = true;
 	ros::Subscriber sub_image1_, sub_image2_, sub_image3_, sub_image4_;
 	ros::Timer timer_;
 	
@@ -34,6 +34,8 @@ public:
 	bool init();
 	void loadimage1(const sensor_msgs::ImageConstPtr& msg);
 	void loadimage2(const sensor_msgs::ImageConstPtr& msg);
+	void loadimage3(const sensor_msgs::ImageConstPtr& msg);
+	void loadimage4(const sensor_msgs::ImageConstPtr& msg);
 	void mosaicpub(const ros::TimerEvent&);
 };
 
@@ -65,6 +67,8 @@ bool ImageMosaic::init()
 	
 	for(int i=0; i<image_id_.size(); ++i)
 	{
+		bool image_ok = false;
+		image_ok_.push_back(image_ok);
 		std::string topic = image_topic_ + std::to_string(image_id_[i]);
 		image_topics_.push_back(topic);
 		cv_bridge::CvImagePtr cv;
@@ -76,6 +80,8 @@ bool ImageMosaic::init()
 	
 	sub_image1_ = nh.subscribe(image_topics_[0], 1, &ImageMosaic::loadimage1, this);
 	sub_image2_ = nh.subscribe(image_topics_[1], 1, &ImageMosaic::loadimage2, this);
+	sub_image3_ = nh.subscribe(image_topics_[2], 1, &ImageMosaic::loadimage3, this);
+	sub_image4_ = nh.subscribe(image_topics_[3], 1, &ImageMosaic::loadimage4, this);
 	
 	timer_ = nh.createTimer(ros::Duration(0.1), &ImageMosaic::mosaicpub, this);
 	
@@ -88,7 +94,7 @@ void ImageMosaic::loadimage1(const sensor_msgs::ImageConstPtr& msg)
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[0] = cv;
-	image1_ = true;
+	image_ok_[0] = true;
 }
 
 void ImageMosaic::loadimage2(const sensor_msgs::ImageConstPtr& msg)
@@ -97,14 +103,37 @@ void ImageMosaic::loadimage2(const sensor_msgs::ImageConstPtr& msg)
 	cv_bridge::CvImagePtr cv;
 	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
 	cv_ptr_[1] = cv;
-	image2_ = true;
+	image_ok_[1] = true;
+}
+
+void ImageMosaic::loadimage3(const sensor_msgs::ImageConstPtr& msg)
+{
+	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	cv_bridge::CvImagePtr cv;
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[2] = cv;
+	image_ok_[2] = true;
+}
+
+void ImageMosaic::loadimage4(const sensor_msgs::ImageConstPtr& msg)
+{
+	ROS_ERROR("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	cv_bridge::CvImagePtr cv;
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[3] = cv;
+	image_ok_[3] = true;
 }
 
 void ImageMosaic::mosaicpub(const ros::TimerEvent&)
 {
 	int width = 0;
+	
 	ROS_INFO("[%s]: image mosaic!",_NODE_NAME_);
-	if (image1_ == true && image2_ == true)
+	for (int i=0; i<image_id_.size(); ++i)
+		if (image_ok_[i] == false)
+			image_all_ok_ = false;
+			
+	if (image_all_ok_)
 	{
 		for (int i=0; i<image_id_.size(); ++i)
 			width += cv_ptr_[i]->image.cols;
@@ -121,7 +150,7 @@ void ImageMosaic::mosaicpub(const ros::TimerEvent&)
 	}
 	else
 	{
-		ROS_INFO("[%s]: wrong image size !",_NODE_NAME_);
+		ROS_INFO("[%s]: Some image load failed!",_NODE_NAME_);
 	}
 }
 
