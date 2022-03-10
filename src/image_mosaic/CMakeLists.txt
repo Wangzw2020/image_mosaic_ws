@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(image_mosaic)
 
 add_compile_options(-std=c++11)
-find_package(catkin REQUIRED COMPONENTS roscpp cv_bridge image_transport sensor_msgs roscpp rospy std_msgs)
+find_package(catkin REQUIRED COMPONENTS roscpp cv_bridge image_transport sensor_msgs roscpp rospy std_msgs message_filters)
 find_package(OpenCV REQUIRED)
 
 catkin_package(
