@@ -4,7 +4,8 @@
 	<arg name="show_result" default="false" />
 
 	<node pkg="image_mosaic" type="image_mosaic_node" name="image_mosaic_node" output="screen">
-		<param name ="image_topic" value="/image_rect"/>
+		<param name ="image_topic1" value="/cam_"/>
+		<param name ="image_topic2" value="/usb_cam/image_raw"/>
 		<param name ="frame_rate" value="30"/>
 		<param name="is_show_result" value="$(arg show_result)"/>
 		<rosparam param="image_id" > [1, 2, 3, 4] </rosparam>

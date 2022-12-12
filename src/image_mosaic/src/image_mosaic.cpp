@@ -7,37 +7,37 @@
 #include <sensor_msgs/CameraInfo.h>
 #include "opencv2/imgproc/detail/distortion_model.hpp"
 
-#include <message_filters/subscriber.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/synchronizer.h>
-
 #define _NODE_NAME_ "image_mosaic"
 
 using namespace cv;
-using namespace std;
-
-typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image> SyncPolicy;
 
 class ImageMosaic
 {
 private:
 	ros::Publisher mosaic_image_pub_;
-	std::string image_topic_;
+	std::vector<image_transport::Subscriber> image_sub_;
+	std::string image_topic1_, image_topic2_;
 	std::vector<int> image_id_;
 	std::vector<std::string> image_topics_;
-	message_filters::Subscriber<sensor_msgs::Image>* sub_image1_;
-	message_filters::Subscriber<sensor_msgs::Image>* sub_image2_;
-	message_filters::Subscriber<sensor_msgs::Image>* sub_image3_;
-	message_filters::Subscriber<sensor_msgs::Image>* sub_image4_;
-	message_filters::Synchronizer<SyncPolicy>* sync_;
+	std::vector<cv_bridge::CvImagePtr> cv_ptr_;
+	cv::Size img_size_, new_img_size_;
+	std::vector<int> imageResolution_;
+	int frame_rate_;
+	bool is_show_result_;
+	std::vector<bool> image_ok_;
+	std::vector<bool> image_mosaic_;
+	bool image_all_ok_, image_all_mosaic_;
+	ros::Subscriber sub_image1_, sub_image2_, sub_image3_, sub_image4_;
+	ros::Timer timer_;
 	
 public:
 	ImageMosaic();
 	bool init();
-	void mosaicpub( const sensor_msgs::ImageConstPtr& msg1, 
-					const sensor_msgs::ImageConstPtr& msg2,
-					const sensor_msgs::ImageConstPtr& msg3, 
-					const sensor_msgs::ImageConstPtr& msg4);
+	void loadimage1(const sensor_msgs::ImageConstPtr& msg);
+	void loadimage2(const sensor_msgs::ImageConstPtr& msg);
+	void loadimage3(const sensor_msgs::ImageConstPtr& msg);
+	void loadimage4(const sensor_msgs::ImageConstPtr& msg);
+	void mosaicpub(const ros::TimerEvent&);
 };
 
 int main(int argc, char** argv)
@@ -57,7 +57,10 @@ ImageMosaic::ImageMosaic()
 bool ImageMosaic::init()
 {
 	ros::NodeHandle nh, nh_private("~");
-	nh_private.param<std::string>("image_topic", image_topic_, "");
+	nh_private.param<std::string>("image_topic1", image_topic1_, "");
+	nh_private.param<std::string>("image_topic2", image_topic2_, "");
+	nh_private.param<int>("frame_rate",frame_rate_,30);
+	nh_private.param<bool>("is_show_result",is_show_result_,false);
 	if(!ros::param::get("~image_id",image_id_))
 	{
 		ROS_ERROR("[%s]: please set image id!",_NODE_NAME_);
@@ -66,71 +69,107 @@ bool ImageMosaic::init()
 	
 	for(int i=0; i<image_id_.size(); ++i)
 	{
-		std::string topic = image_topic_ + std::to_string(image_id_[i]);
+		bool image_ok = false;
+		bool image_mosaic = false;
+		
+		image_ok_.push_back(image_ok);
+		image_mosaic_.push_back(image_mosaic);
+		std::string topic = image_topic1_ + std::to_string(image_id_[i]) + image_topic2_;
 		image_topics_.push_back(topic);
+		cv_bridge::CvImagePtr cv;
+		cv_ptr_.push_back(cv);
 	}
 	
+	//image_transport::ImageTransport it(nh);
 	mosaic_image_pub_ = nh.advertise<sensor_msgs::Image>("/image_mosaic", 1);
-	sub_image1_ = new message_filters::Subscriber<sensor_msgs::Image>(nh, image_topics_[0], 1);
-	sub_image2_ = new message_filters::Subscriber<sensor_msgs::Image>(nh, image_topics_[1], 1);
-	sub_image3_ = new message_filters::Subscriber<sensor_msgs::Image>(nh, image_topics_[2], 1);
-	sub_image4_ = new message_filters::Subscriber<sensor_msgs::Image>(nh, image_topics_[3], 1);;
 	
-	sync_ = new message_filters::Synchronizer<SyncPolicy>(SyncPolicy(10), *sub_image1_, *sub_image2_, *sub_image3_, *sub_image4_);
-	sync_->registerCallback(boost::bind(&ImageMosaic::mosaicpub, this, _1, _2, _3, _4));
+	sub_image1_ = nh.subscribe(image_topics_[0], 1, &ImageMosaic::loadimage1, this);
+	sub_image2_ = nh.subscribe(image_topics_[1], 1, &ImageMosaic::loadimage2, this);
+	sub_image3_ = nh.subscribe(image_topics_[2], 1, &ImageMosaic::loadimage3, this);
+	sub_image4_ = nh.subscribe(image_topics_[3], 1, &ImageMosaic::loadimage4, this);
 	
-	ROS_INFO("[%s]: image_mosaic initial ok.!",_NODE_NAME_);
+	timer_ = nh.createTimer(ros::Duration(0.05), &ImageMosaic::mosaicpub, this);
+	
+	ROS_INFO("image_mosaic initial ok.");
 }
 
-void ImageMosaic::mosaicpub(const sensor_msgs::ImageConstPtr& msg1, 
-							const sensor_msgs::ImageConstPtr& msg2,
-							const sensor_msgs::ImageConstPtr& msg3, 
-							const sensor_msgs::ImageConstPtr& msg4)
+void ImageMosaic::loadimage1(const sensor_msgs::ImageConstPtr& msg)
 {
-	int mosaic_width = 0;
-	int image_height, image_width;
-	ROS_INFO("[%s]: image mosaic!",_NODE_NAME_);
-	cv::Mat image1, image2, image3, image4;
-	
-	std::vector<cv_bridge::CvImagePtr> cv_ptr;
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
 	cv_bridge::CvImagePtr cv;
-	cv = cv_bridge::toCvCopy(msg1, sensor_msgs::image_encodings::BGR8);
-	image_width = cv->image.cols;
-	image_height = cv->image.rows;
-	mosaic_width += cv->image.cols;
-	cv_ptr.push_back(cv);
-	
-	cv = cv_bridge::toCvCopy(msg2, sensor_msgs::image_encodings::BGR8);
-	image_width = cv->image.cols;
-	image_height = cv->image.rows;
-	mosaic_width += cv->image.cols;
-	cv_ptr.push_back(cv);
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[0] = cv;
+	image_ok_[0] = true;
+	image_mosaic_[0] = false;
+}
 
-	cv = cv_bridge::toCvCopy(msg3, sensor_msgs::image_encodings::BGR8);
-	image_width = cv->image.cols;
-	image_height = cv->image.rows;
-	mosaic_width += cv->image.cols;
-	cv_ptr.push_back(cv);
-	
-	cv = cv_bridge::toCvCopy(msg4, sensor_msgs::image_encodings::BGR8);
-	image_width = cv->image.cols;
-	image_height = cv->image.rows;
-	mosaic_width += cv->image.cols;
-	cv_ptr.push_back(cv);
+void ImageMosaic::loadimage2(const sensor_msgs::ImageConstPtr& msg)
+{
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	cv_bridge::CvImagePtr cv;
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[1] = cv;
+	image_ok_[1] = true;
+	image_mosaic_[1] = false;
+}
 
-	cv::Mat mosaic_image(image_height, mosaic_width, CV_8UC3);
-	mosaic_image.setTo(0);
-	
+void ImageMosaic::loadimage3(const sensor_msgs::ImageConstPtr& msg)
+{
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	cv_bridge::CvImagePtr cv;
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[2] = cv;
+	image_ok_[2] = true;
+	image_mosaic_[2] = false;
+}
+
+void ImageMosaic::loadimage4(const sensor_msgs::ImageConstPtr& msg)
+{
+	ROS_INFO("[%s]: getting image! %s",_NODE_NAME_, msg->header.frame_id.c_str());
+	cv_bridge::CvImagePtr cv;
+	cv = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+	cv_ptr_[3] = cv;
+	image_ok_[3] = true;
+	image_mosaic_[3] = false;
+}
+
+void ImageMosaic::mosaicpub(const ros::TimerEvent&)
+{
+	int width = 0;
+	image_all_ok_ = true;
+	ROS_INFO("[%s]: image mosaic!",_NODE_NAME_);
 	for (int i=0; i<image_id_.size(); ++i)
 	{
-		cv_ptr[i]->image.copyTo(mosaic_image(Rect(i * image_width, 0, image_width, image_height)));
+		if (image_ok_[i] == false)
+			image_all_ok_ = false;
+		if (image_mosaic_[i] == true)
+			image_all_mosaic_ = true; 
 	}
 	
-	sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", mosaic_image).toImageMsg();
-	imageMsg->header.frame_id = std::string("mosaic image");
-	imageMsg->header.stamp = ros::Time::now();
-	mosaic_image_pub_.publish(imageMsg);
-	ROS_INFO("[%s]: mosaic image public!", _NODE_NAME_);
+	if (image_all_ok_ && !image_all_mosaic_)
+	{
+		for (int i=0; i<image_id_.size(); ++i)
+			width += cv_ptr_[i]->image.cols;
+		int img_width = cv_ptr_[0]->image.cols;
+		int height = cv_ptr_[0]->image.rows;
+		cv::Mat mosaic_image(height, width, CV_8UC3);
+		mosaic_image.setTo(0);
+		
+		for (int i=0; i<image_id_.size(); ++i)
+		{
+			cv_ptr_[i]->image.copyTo(mosaic_image(Rect(i * img_width, 0, img_width, height)));
+			image_mosaic_[i] = true;
+		}
+			
+		sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", mosaic_image).toImageMsg();
+		imageMsg->header.frame_id = std::string("mosaic image");
+		imageMsg->header.stamp = ros::Time::now();
+		mosaic_image_pub_.publish(imageMsg);
+	}
+	else
+	{
+		ROS_ERROR("[%s]: Some image load failed!",_NODE_NAME_);
+	}
 }
 
 
